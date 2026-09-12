@@ -6,8 +6,8 @@ local AntiVoidConn
 local CharacterAddedConn
 
 local VoidPosition = -9e9
-local VoidVelocity = -150
 local VoidDistance = 1000
+local SafeHeight = 25
 
 local LastSafeCFrame
 local Character
@@ -65,12 +65,16 @@ local function CheckVoid(RootPart)
         return
     end
 
-    if Velocity.Y <= VoidVelocity and Position.Y < LastSafeCFrame.Position.Y - VoidDistance then
-        ReturnToSafePosition(RootPart)
-        return
+    if LastSafeCFrame then
+        local SafeY = LastSafeCFrame.Position.Y
+
+        if Position.Y < SafeY - VoidDistance and Velocity.Y < -SafeHeight then
+            ReturnToSafePosition(RootPart)
+            return
+        end
     end
 
-    if Position.Y > VoidPosition + VoidDistance then
+    if Velocity.Y > -SafeHeight then
         SaveSafePosition(RootPart)
     end
 end
@@ -108,12 +112,6 @@ local function AntiVoid()
         if not AntiVoidActive then
             return
         end
-
-        pcall(function()
-            if workspace.FallenPartsDestroyHeight ~= VoidPosition then
-                workspace.FallenPartsDestroyHeight = VoidPosition
-            end
-        end)
 
         local CurrentRoot = GetRoot()
 

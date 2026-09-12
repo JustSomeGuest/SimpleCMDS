@@ -4,12 +4,12 @@ local RunService = GetService("RunService")
 local AntiFlingActive = false
 local AntiflingConn
 local AntiflingPlayerConn
+local LocalCharacterConn
 
 local MaxLinearVelocity = 100
 local MaxAngularVelocity = 100
 
 local RubberbandVelocity = 150
-local RubberbandDistance = 12
 
 local PlayerConnections = {}
 local CharacterParts = {}
@@ -17,6 +17,7 @@ local OriginalCanCollide = {}
 
 local LastSafeCFrame
 local LastSafeTime = 0
+local CurrentCharacter
 
 local function Disconnect(Connection)
     if Connection then
@@ -33,24 +34,16 @@ local function ClampVelocity(Part)
     local LinearMagnitude = LinearVelocity.Magnitude
 
     if LinearMagnitude > MaxLinearVelocity then
-        if LinearMagnitude > 0 then
-            Part.AssemblyLinearVelocity =
-                LinearVelocity * (MaxLinearVelocity / LinearMagnitude)
-        else
-            Part.AssemblyLinearVelocity = Vector3.zero
-        end
+        Part.AssemblyLinearVelocity =
+            LinearVelocity * (MaxLinearVelocity / LinearMagnitude)
     end
 
     local AngularVelocity = Part.AssemblyAngularVelocity
     local AngularMagnitude = AngularVelocity.Magnitude
 
     if AngularMagnitude > MaxAngularVelocity then
-        if AngularMagnitude > 0 then
-            Part.AssemblyAngularVelocity =
-                AngularVelocity * (MaxAngularVelocity / AngularMagnitude)
-        else
-            Part.AssemblyAngularVelocity = Vector3.zero
-        end
+        Part.AssemblyAngularVelocity =
+            AngularVelocity * (MaxAngularVelocity / AngularMagnitude)
     end
 end
 
@@ -99,13 +92,6 @@ local function SetupCharacter(Character)
         AddedConnection,
         RemovingConnection
     }
-
-    local RootPart = Character:FindFirstChild("HumanoidRootPart")
-
-    if RootPart and RootPart:IsA("BasePart") then
-        LastSafeCFrame = RootPart.CFrame
-        LastSafeTime = os.clock()
-    end
 end
 
 local function CleanupCharacter(Character)
@@ -120,7 +106,7 @@ local function CleanupCharacter(Character)
     end
 
     for Part in pairs(CharacterParts) do
-        if Part:IsDescendantOf(Character) then
+        if not Part.Parent or Part:IsDescendantOf(Character) then
             UntrackPart(Part)
         end
     end
@@ -151,26 +137,23 @@ local function SetupPlayer(Player)
     }
 end
 
-local function CleanupAll()
-    for Object, Connections in pairs(PlayerConnections) do
-        for _, Connection in ipairs(Connections) do
-            Disconnect(Connection)
-        end
-
-        PlayerConnections[Object] = nil
-    end
-
-    for Part, OriginalCanCollideValue in pairs(OriginalCanCollide) do
-        if Part.Parent then
-            Part.CanCollide = OriginalCanCollideValue
-        end
-    end
-
-    table.clear(CharacterParts)
-    table.clear(OriginalCanCollide)
-
+local function SetupLocalCharacter()
+    CurrentCharacter = Plr.Character
     LastSafeCFrame = nil
     LastSafeTime = 0
+
+    local Character = CurrentCharacter
+
+    if not Character then
+        return
+    end
+
+    local RootPart = Character:FindFirstChild("HumanoidRootPart")
+
+    if RootPart and RootPart:IsA("BasePart") then
+        LastSafeCFrame = RootPart.CFrame
+        LastSafeTime = os.clock()
+    end
 end
 
 local function RubberbandCharacter(RootPart)
@@ -187,8 +170,16 @@ local function CheckLocalCharacter()
     local Character = Plr.Character
 
     if not Character then
+        CurrentCharacter = nil
         LastSafeCFrame = nil
+        LastSafeTime = 0
         return
+    end
+
+    if Character ~= CurrentCharacter then
+        CurrentCharacter = Character
+        LastSafeCFrame = nil
+        LastSafeTime = 0
     end
 
     local RootPart = Character:FindFirstChild("HumanoidRootPart")
@@ -206,12 +197,7 @@ local function CheckLocalCharacter()
     local Velocity = RootPart.AssemblyLinearVelocity
     local VelocityMagnitude = Velocity.Magnitude
 
-    local DistanceFromSafe =
-        (RootPart.Position - LastSafeCFrame.Position).Magnitude
-
-    if VelocityMagnitude >= RubberbandVelocity
-        or DistanceFromSafe >= RubberbandDistance then
-
+    if VelocityMagnitude >= RubberbandVelocity then
         RubberbandCharacter(RootPart)
         return
     end
@@ -230,6 +216,8 @@ local function Antifling()
 
     AntiFlingActive = true
 
+    SetupLocalCharacter()
+
     for _, Player in ipairs(Players:GetPlayers()) do
         SetupPlayer(Player)
     end
@@ -237,6 +225,13 @@ local function Antifling()
     AntiflingPlayerConn = Players.PlayerAdded:Connect(function(Player)
         if AntiFlingActive then
             SetupPlayer(Player)
+        end
+    end)
+
+    LocalCharacterConn = Plr.CharacterAdded:Connect(function()
+        if AntiFlingActive then
+            task.wait()
+            SetupLocalCharacter()
         end
     end)
 
@@ -269,11 +264,32 @@ local function Unantifling()
 
     Disconnect(AntiflingConn)
     Disconnect(AntiflingPlayerConn)
+    Disconnect(LocalCharacterConn)
 
     AntiflingConn = nil
     AntiflingPlayerConn = nil
+    LocalCharacterConn = nil
 
-    CleanupAll()
+    for Object, Connections in pairs(PlayerConnections) do
+        for _, Connection in ipairs(Connections) do
+            Disconnect(Connection)
+        end
+
+        PlayerConnections[Object] = nil
+    end
+
+    for Part, OriginalCanCollideValue in pairs(OriginalCanCollide) do
+        if Part.Parent then
+            Part.CanCollide = OriginalCanCollideValue
+        end
+    end
+
+    table.clear(CharacterParts)
+    table.clear(OriginalCanCollide)
+
+    CurrentCharacter = nil
+    LastSafeCFrame = nil
+    LastSafeTime = 0
 
     Notify("AntiFling: Disabled")
 end

@@ -288,7 +288,7 @@ Cmd.new(
 )
 
 Cmd.new(
-    {"unantifling", "uaf"},
+    {"unantifling", "unaf"},
     "Disables anti-fling.",
     "unantifling",
     function()

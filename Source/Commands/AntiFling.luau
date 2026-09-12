@@ -8,9 +8,15 @@ local AntiflingPlayerConn
 local MaxLinearVelocity = 100
 local MaxAngularVelocity = 100
 
+local RubberbandVelocity = 150
+local RubberbandDistance = 12
+
 local PlayerConnections = {}
 local CharacterParts = {}
 local OriginalCanCollide = {}
+
+local LastSafeCFrame
+local LastSafeTime = 0
 
 local function Disconnect(Connection)
     if Connection then
@@ -93,6 +99,13 @@ local function SetupCharacter(Character)
         AddedConnection,
         RemovingConnection
     }
+
+    local RootPart = Character:FindFirstChild("HumanoidRootPart")
+
+    if RootPart and RootPart:IsA("BasePart") then
+        LastSafeCFrame = RootPart.CFrame
+        LastSafeTime = os.clock()
+    end
 end
 
 local function CleanupCharacter(Character)
@@ -155,6 +168,58 @@ local function CleanupAll()
 
     table.clear(CharacterParts)
     table.clear(OriginalCanCollide)
+
+    LastSafeCFrame = nil
+    LastSafeTime = 0
+end
+
+local function RubberbandCharacter(RootPart)
+    if not RootPart or not RootPart.Parent or not LastSafeCFrame then
+        return
+    end
+
+    RootPart.CFrame = LastSafeCFrame
+    RootPart.AssemblyLinearVelocity = Vector3.zero
+    RootPart.AssemblyAngularVelocity = Vector3.zero
+end
+
+local function CheckLocalCharacter()
+    local Character = Plr.Character
+
+    if not Character then
+        LastSafeCFrame = nil
+        return
+    end
+
+    local RootPart = Character:FindFirstChild("HumanoidRootPart")
+
+    if not RootPart or not RootPart:IsA("BasePart") then
+        return
+    end
+
+    if not LastSafeCFrame then
+        LastSafeCFrame = RootPart.CFrame
+        LastSafeTime = os.clock()
+        return
+    end
+
+    local Velocity = RootPart.AssemblyLinearVelocity
+    local VelocityMagnitude = Velocity.Magnitude
+
+    local DistanceFromSafe =
+        (RootPart.Position - LastSafeCFrame.Position).Magnitude
+
+    if VelocityMagnitude >= RubberbandVelocity
+        or DistanceFromSafe >= RubberbandDistance then
+
+        RubberbandCharacter(RootPart)
+        return
+    end
+
+    if VelocityMagnitude <= MaxLinearVelocity then
+        LastSafeCFrame = RootPart.CFrame
+        LastSafeTime = os.clock()
+    end
 end
 
 local function Antifling()
@@ -188,15 +253,7 @@ local function Antifling()
             end
         end
 
-        local Character = Plr.Character
-
-        if Character then
-            local RootPart = Character:FindFirstChild("HumanoidRootPart")
-
-            if RootPart and RootPart:IsA("BasePart") then
-                ClampVelocity(RootPart)
-            end
-        end
+        CheckLocalCharacter()
     end)
 
     Notify("AntiFling: Enabled")

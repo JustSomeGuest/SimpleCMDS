@@ -82,11 +82,11 @@ end
 
 local function Notify(Text)
     if NotifsSuccess then
-        local success = pcall(function()
+        local Success = pcall(function()
             Notifs:Notify("CmdPlus", Text)
         end)
 
-        if success then
+        if Success then
             return
         end
 
@@ -293,22 +293,22 @@ end
 
 local Plr = Players.LocalPlayer
 
-local function FindPlr(searchTerm)
-    local matches = {}
-    local searchLower = searchTerm:lower()
+local function FindPlr(SearchTerm)
+    local Matches = {}
+    local SearchLower = SearchTerm:lower()
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        local nameLower = player.Name:lower()
-        local displayLower = player.DisplayName:lower()
+    for _, Player in ipairs(Players:GetPlayers()) do
+        local NameLower = Player.Name:lower()
+        local DisplayLower = Player.DisplayName:lower()
 
-        if nameLower == searchLower or displayLower == searchLower then
-            table.insert(matches, player)
-        elseif nameLower:match(searchLower) or displayLower:match(searchLower) then
-            table.insert(matches, player)
+        if NameLower == SearchLower or DisplayLower == SearchLower then
+            table.insert(Matches, Player)
+        elseif NameLower:match(SearchLower) or DisplayLower:match(SearchLower) then
+            table.insert(Matches, Player)
         end
     end
 
-    return matches
+    return Matches
 end
 
 local function Tween(Object, Speed, Properties, EasingStyle, EasingDirection)
@@ -416,158 +416,153 @@ local function CreateCmdEnv()
     return ModEnv
 end
 
-local function LoadCmd(url)
-    local success, result = pcall(function()
-        return game:HttpGet(url)
+local function LoadCmd(URL)
+    local Success, Result = pcall(function()
+        return game:HttpGet(URL)
     end)
 
-    if success and result then
-        local func, err = loadstring(result)
-
-        if func then
-            local env = CreateCmdEnv()
-            setfenv(func, env)
-
-            local success, err = pcall(func)
-
-            if not success then
-                warn("[CmdPlus] Failed to execute command: " .. url .. " - " .. tostring(err))
-            end
-
-            return true
-        else
-            warn("[CmdPlus] Failed to compile command: " .. url .. " - " .. tostring(err))
-        end
-    else
-        warn("[CmdPlus] Failed to download command: " .. url)
+    if not Success or not Result then
+        warn("[CmdPlus] Failed to download command: " .. URL)
+        return false
     end
 
-    return false
+    local Func, CompileError = loadstring(Result)
+
+    if not Func then
+        warn("[CmdPlus] Failed to compile command: " .. URL .. " - " .. tostring(CompileError))
+        return false
+    end
+
+    local Env = CreateCmdEnv()
+    setfenv(Func, Env)
+
+    local ExecuteSuccess, ExecuteError = pcall(Func)
+
+    if not ExecuteSuccess then
+        warn("[CmdPlus] Failed to execute command: " .. URL .. " - " .. tostring(ExecuteError))
+        return false
+    end
+
+    return true
 end
 
 local function LoadCoreCmds()
     for _, CmdFile in ipairs(BuiltInCmds) do
-        local url = CmdsURL .. CmdFile .. ".luau"
-        LoadCmd(url)
+        LoadCmd(CmdsURL .. CmdFile .. ".luau")
     end
 end
 
 local function LoadUserCmds()
-    if IsFolder("CmdPlus/UserCmds") then
-        local files = ListFiles("CmdPlus/UserCmds")
-
-        for _, file in ipairs(files) do
-            if file:match("%.luau$") or file:match("%.lua$") then
-                local success, chunk = pcall(function()
-                    local content = ReadFile(file)
-                    local func = loadstring(content)
-
-                    if func then
-                        local env = CreateCmdEnv()
-                        setfenv(func, env)
-                        return func()
-                    end
-                end)
-
-                if not success then
-                    warn("[CmdPlus] Failed to load user command: " .. file)
-                end
-            end
-        end
+    if not IsFolder("CmdPlus/UserCmds") then
+        return
     end
-end
 
-local function LoadAutoConfig()
-    if IsFile("CmdPlus/Autoload.luau") then
-        local success, chunk = pcall(function()
-            local content = ReadFile("CmdPlus/Autoload.luau")
-            local func = loadstring(content)
+    local Files = ListFiles("CmdPlus/UserCmds")
 
-            if func then
-                local env = CreateCmdEnv()
-                setfenv(func, env)
-                return func()
+    for _, File in ipairs(Files) do
+        if File:match("%.luau$") or File:match("%.lua$") then
+            local Success, Error = pcall(function()
+                local Content = ReadFile(File)
+                local Func = loadstring(Content)
+
+                if not Func then
+                    error("Failed to compile")
+                end
+
+                local Env = CreateCmdEnv()
+                setfenv(Func, Env)
+                Func()
+            end)
+
+            if not Success then
+                warn("[CmdPlus] Failed to load user command: " .. File .. " - " .. tostring(Error))
             end
-        end)
-
-        if not success then
-            warn("[CmdPlus] Failed to load autoload config")
         end
     end
 end
 
 local function CreateAutoExec()
     if not IsFile("CmdPlus/Autoexecute.luau") then
-        local template = [[return {
-    }]]
-
-        WriteFile("CmdPlus/Autoexecute.luau", template)
+        WriteFile("CmdPlus/Autoexecute.luau", [[return {
+}]])
     end
 end
 
 local function LoadAutoExec()
-    if IsFile("CmdPlus/Autoexecute.luau") then
-        local success, content = pcall(function()
-            return ReadFile("CmdPlus/Autoexecute.luau")
-        end)
+    if not IsFile("CmdPlus/Autoexecute.luau") then
+        return
+    end
 
-        if success and content then
-            local func, err = loadstring(content)
+    local Success, Content = pcall(ReadFile, "CmdPlus/Autoexecute.luau")
 
-            if func then
-                local env = CreateCmdEnv()
-                setfenv(func, env)
+    if not Success or not Content then
+        warn("[CmdPlus] Failed to read autoexecute config")
+        return
+    end
 
-                local success, result = pcall(func)
+    local Func, CompileError = loadstring(Content)
 
-                if success and type(result) == "table" then
-                    for _, cmd in ipairs(result) do
-                        if not cmd:match("^%-%-") then
-                            local args = {}
+    if not Func then
+        warn("[CmdPlus] Failed to compile autoexecute config: " .. tostring(CompileError))
+        return
+    end
 
-                            for word in cmd:gmatch("%S+") do
-                                table.insert(args, word)
-                            end
+    local Env = CreateCmdEnv()
+    setfenv(Func, Env)
 
-                            local cmdName = args[1] and args[1]:lower()
-                            local cmdFunc = Cmds[cmdName]
+    local ExecuteSuccess, Result = pcall(Func)
 
-                            if cmdFunc then
-                                local success, err = pcall(cmdFunc, args)
+    if not ExecuteSuccess then
+        warn("[CmdPlus] Failed to execute autoexecute config: " .. tostring(Result))
+        return
+    end
 
-                                if not success then
-                                    warn("[CmdPlus] Failed to autoexecute command: " .. cmd .. " - " .. tostring(err))
-                                end
-                            else
-                                warn("[CmdPlus] Unknown command in autoexecute: " .. cmd)
-                            end
-                        end
-                    end
+    if type(Result) ~= "table" then
+        return
+    end
+
+    for _, Command in ipairs(Result) do
+        if type(Command) == "string" and not Command:match("^%-%-") then
+            local Args = {}
+
+            for Word in Command:gmatch("%S+") do
+                table.insert(Args, Word)
+            end
+
+            local CmdName = Args[1] and Args[1]:lower()
+            local CmdFunc = Cmds[CmdName]
+
+            if CmdFunc then
+                local Success, Error = pcall(CmdFunc, Args)
+
+                if not Success then
+                    warn("[CmdPlus] Failed to autoexecute command: " .. Command .. " - " .. tostring(Error))
                 end
+            else
+                warn("[CmdPlus] Unknown command in autoexecute: " .. Command)
             end
         end
     end
 end
 
 local function LoadPrefix()
-    if IsFile("CmdPlus/Prefix.luau") then
-        local success, content = pcall(function()
-            return ReadFile("CmdPlus/Prefix.luau")
-        end)
+    if not IsFile("CmdPlus/Prefix.luau") then
+        return
+    end
 
-        if success and content then
-            local prefix = content:gsub("%s+", "")
+    local Success, Content = pcall(ReadFile, "CmdPlus/Prefix.luau")
 
-            if prefix ~= "" and #prefix == 1 then
-                Prefix = prefix
-            end
+    if Success and Content then
+        local NewPrefix = Content:gsub("%s+", "")
+
+        if NewPrefix ~= "" and #NewPrefix == 1 then
+            Prefix = NewPrefix
         end
     end
 end
 
 LoadCoreCmds()
 LoadUserCmds()
-LoadAutoConfig()
 CreateAutoExec()
 LoadPrefix()
 LoadAutoExec()
@@ -677,10 +672,10 @@ TweenService:Create(
 Dragify(UI.CmdBtn)
 
 local CmdbarOpen = false
-local CmdbarTweenInfo = TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 
 local function OpenCmdbar()
     CmdbarOpen = true
+
     UI.Cmdbar.Position = UDim2.new(0.5, 0, 0.55, 0)
     UI.Cmdbar.Size = UDim2.new(0.85, 0, 0, 40)
     UI.Cmdbar.BackgroundTransparency = 1
@@ -742,6 +737,7 @@ end
 local function RunCmdbarInput()
     local Text = UI.Cmdbox.Text
     UI.Cmdbox.Text = ""
+
     CloseCmdbar()
 
     if Text == "" then
@@ -758,7 +754,11 @@ local function RunCmdbarInput()
     local CmdFunc = Cmds[CmdName]
 
     if CmdFunc then
-        pcall(CmdFunc, Args)
+        local Success, Error = pcall(CmdFunc, Args)
+
+        if not Success then
+            warn("[CmdPlus] Command error: " .. tostring(Error))
+        end
     else
         Notify('"' .. (Args[1] or Text) .. '" isn\'t a valid command.')
     end
@@ -840,6 +840,10 @@ Plr.Chatted:Connect(function(Message)
     local CmdFunc = Cmds[CmdName]
 
     if CmdFunc then
-        CmdFunc(Args)
+        local Success, Error = pcall(CmdFunc, Args)
+
+        if not Success then
+            warn("[CmdPlus] Command error: " .. tostring(Error))
+        end
     end
 end)
